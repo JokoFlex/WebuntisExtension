@@ -107,11 +107,13 @@ struct TimeGrid: Decodable
     let day: Int
     var timeUnits: [LessonSpan]
 
-    init()
+    private init()
     {
         day = -1
         timeUnits = []
     }
+
+    static let empty = TimeGrid()
 
     enum CodingKeys: String, CodingKey {
         case day, timeUnits
@@ -130,10 +132,12 @@ struct TimeGrid: Decodable
 
 struct Weekplan
 {
+    private(set) var mondayOfWeek: Date = Date()
     private(set) var days: [Dayplan] = []
 
-    init(webuntis: WebUntisAPI, lessons: [Lesson])
+    init(webuntis: WebUntisAPI, lessons: [Lesson], mondayOfWeek: Date)
     {
+        self.mondayOfWeek = mondayOfWeek
         var days: [Dayplan] = []
         for i in 1...5
         {
@@ -144,7 +148,7 @@ struct Weekplan
 
     private init()
     {
-        self.days = []
+
     }
 
     static let empty = Weekplan()
@@ -176,18 +180,12 @@ struct Weekplan
             i = 0
             while i < hours.count - 1
             {
-                if hours[i].count == 1 && hours[i + 1].count == 1
+                if hours[i].count == 1 &&
+                    hours[i + 1].count == 1 &&
+                    hours[i][0].subject == hours[i + 1][0].subject
                 {
-                    if hours[i][0].subject == hours[i + 1][0].subject
-                    {
-                        hours[i][0].durationInHours += 1
-                        hours[i][0].endTime = hours[i + 1][0].endTime
-                        hours.remove(at: i + 1)
-                    }
-                    else
-                    {
-                        i += 1
-                    }
+                    hours[i][0].changeDurations(newEndTime: hours[i + 1][0].endTime, newDuration: hours[i][0].durationInHours + 1)
+                    hours.remove(at: i + 1)
                 }
                 else
                 {
@@ -206,16 +204,23 @@ struct Lesson: Equatable
 
     let id: Int
     let dayOfWeek: Int // Monday = 1
-    let startTime: Int
-    var endTime: Int
-    var durationInHours: Int
-    let hourIndex: Int
+    private(set) var startTime: Int
+    private(set) var endTime: Int
+    private(set) var durationInHours: Int
+    private(set) var hourIndex: Int
     let code: LessonSpecification
     let klassen: [Klasse]
     let teachers: [Teacher]
     let subject: Subject
     let rooms: [Room]
 
+    mutating func changeDurations(newHourIndex: Int? = nil, newStartTime: Int? = nil, newEndTime: Int? = nil, newDuration: Int? = nil)
+    {
+        self.hourIndex = newHourIndex ?? self.hourIndex
+        self.startTime = newStartTime ?? self.startTime
+        self.endTime = newEndTime ?? self.endTime
+        self.durationInHours = newDuration ?? self.durationInHours
+    }
 
     func getColor() -> Color
     {
@@ -304,7 +309,21 @@ struct Lesson: Equatable
         decodedLessons.forEach()
         {
             dl in
-            lessons.append(Lesson(webuntisAPI: webuntisAPI, decodedLesson: dl))
+            let newLesson = Lesson(webuntisAPI: webuntisAPI, decodedLesson: dl)
+            if newLesson.durationInHours > 1
+            {
+                for i in newLesson.hourIndex..<newLesson.hourIndex + newLesson.durationInHours
+                {
+                    var subLesson = newLesson
+                    subLesson.changeDurations(newHourIndex: i,newStartTime: webuntisAPI.timeGrid.timeUnits[i-1].startTime, newEndTime: webuntisAPI.timeGrid.timeUnits[i-1].endTime, newDuration: 1)
+                    print(subLesson)
+                    lessons.append(subLesson)
+                }
+            }
+            else
+            {
+                lessons.append(newLesson)
+            }
         }
         return lessons
     }
@@ -368,13 +387,15 @@ struct SchoolYear: Decodable
         case id, name, startDate, endDate
     }
 
-    init()
+    private init()
     {
         id = 0
         name = ""
         startDate = Date()
         endDate = Date()
     }
+
+    static let empty = SchoolYear()
 
     init(from decoder: Decoder) throws {
 
@@ -524,3 +545,4 @@ struct Teacher: Equatable
         245: ["SY", "Schöttl"]
     ]
 }
+

@@ -47,6 +47,19 @@ struct Webuntis: View
         {
             VStack(spacing: 0)
             {
+                var weekSchedule: Weekplan?
+                {
+                    var thisWeek: Weekplan? = nil
+                    webuntis.weekSchedule.forEach()
+                    {
+                        week in
+                        if week.mondayOfWeek == webuntis.mondayOfWeek
+                        {
+                            thisWeek = week
+                        }
+                    }
+                    return thisWeek
+                }
 
                 TopBar()
 
@@ -54,7 +67,12 @@ struct Webuntis: View
 
                 Group
                 {
-                    if webuntis.isLoading
+                    if weekSchedule != nil
+                    {
+                        ScheduleDisplay(weekplan: weekSchedule!)
+                            .padding(.vertical, Sizes.cellSpacing)
+                    }
+                    else if webuntis.isLoading
                     {
                         VStack
                         {
@@ -81,11 +99,6 @@ struct Webuntis: View
                                 .foregroundColor(.white)
                             Spacer()
                         }
-                    }
-                    else
-                    {
-                        ScheduleDisplay()
-                            .padding(.vertical, Sizes.cellSpacing)
                     }
                 }
                     .frame(height: Sizes.cellHeight * 11 + Sizes.cellSpacing * 12)
@@ -207,13 +220,10 @@ struct OptionsView: View
                     .textFieldStyle(.roundedBorder)
                 Button(action:
                     {
-                        webuntis.errorIn(.login, jsonAnswer: "")
+                        webuntis.errorIn(.login, httpAnswer: "")
                         webuntis.optionsOpen = false
                         webuntis.username = inputUser
                         webuntis.password = inputPW
-
-                        UserDefaults.standard.set(inputUser, forKey: "username")
-                        UserDefaults.standard.set(inputPW, forKey: "password")
                     })
                 {
                     Text("Speichern")
@@ -280,11 +290,13 @@ struct DateBar: View
 struct ScheduleDisplay: View
 {
     @EnvironmentObject var webuntis: WebUntisAPI
+    let weekSchedule: Weekplan
     let dateFormatter: DateFormatter
     let calender = Calendar.current
 
-    init()
+    init(weekplan: Weekplan)
     {
+        weekSchedule = weekplan
         dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .short
         dateFormatter.timeStyle = .none
@@ -294,12 +306,13 @@ struct ScheduleDisplay: View
     {
         HStack(alignment: .top, spacing: Sizes.cellSpacing)
         {
-            ForEach(0..<webuntis.weekSchedule.days.count, id: \.self)
+            ForEach(0..<weekSchedule.days.count, id: \.self)
             {
                 index in
-                let weekday = webuntis.weekSchedule.days[index]
+                let weekday = weekSchedule.days[index]
                 let excursion = getExcursion(weekday.hours)
                 let holiday = getHoliday(dayOfWeek: index)
+                
                 if holiday != nil
                 {
                     HolidayBox(holiday: getHoliday(dayOfWeek: index)!)
@@ -392,10 +405,6 @@ struct ExcurionBox: View
                 .foregroundColor(LessonSpecification.excursion.getColorOfSpecify().background)
                 .onTapGesture {
                 webuntis.detailedLesson = webuntis.detailedLesson == lesson ? nil : lesson
-            }
-                .onAppear()
-            {
-                print(lesson)
             }
 
             Text(lesson.teachers[0].name)

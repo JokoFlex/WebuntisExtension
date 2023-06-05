@@ -10,7 +10,7 @@ import Foundation
 class WebUntisAPI: ObservableObject
 {
     @Published var currentDate: Date = Date()
-    
+
     private let baseURLStr = "https://mese.webuntis.com/WebUntis/jsonrpc.do?school=htbla_kaindorf"
     private var sessionID: String = ""
     private var klassenID: Int = 0
@@ -52,9 +52,9 @@ class WebUntisAPI: ObservableObject
     var subjects: [Subject] = []
     var departments: [Department] = []
     var holidays: [Holiday] = []
-    var schoolYear: SchoolYear = SchoolYear()
-    var timeGrid: TimeGrid = TimeGrid()
-    var weekSchedule: Weekplan = Weekplan.empty
+    var schoolYear: SchoolYear = SchoolYear.empty
+    var timeGrid: TimeGrid = TimeGrid.empty
+    var weekSchedule: [Weekplan] = []
 
     var mondayOfWeek: Date
     {
@@ -109,15 +109,15 @@ class WebUntisAPI: ObservableObject
             break
         }
     }
-    func errorIn(_ getTypes: GetTypes, jsonAnswer: String)
+    func errorIn(_ getTypes: GetTypes, httpAnswer: String)
     {
-        print(jsonAnswer)
-        if jsonAnswer.contains("not authenticated")
+        print(httpAnswer)
+        if httpAnswer.contains("not authenticated")
         {
             self.beginFetchAt = .login
         }
-        
-        
+
+
         if self.beginFetchAt == nil
         {
             self.beginFetchAt = getTypes
@@ -148,7 +148,7 @@ class WebUntisAPI: ObservableObject
         self.displayedDay = Date.now
     }
 
-    func getResultOfJSONAnswer(data: Data?) -> String
+    func getResultOfhttpAnswer(data: Data?) -> String
     {
         guard let data = data else {
             return ""
@@ -188,7 +188,7 @@ class WebUntisAPI: ObservableObject
         URLSession.shared.dataTask(with: request) { data, _, _ in
             var res = ""
             guard let data = data else {
-                self.errorIn(.login, jsonAnswer: "")
+                self.errorIn(.login, httpAnswer: "")
                 return
             }
 
@@ -196,15 +196,13 @@ class WebUntisAPI: ObservableObject
             if res.contains("sessionId")
             {
 //                Get SessionID from JSON part: ..."sessionId":"SESSIONID"...
-                print(res)
                 self.sessionID = String(String(res.split(separator: "sessionId\":\"", maxSplits: 1)[1]).split(separator: "\"", maxSplits: 1)[0])
                 self.klassenID = Int(String(String(res.split(separator: "klasseId\":")[1]).split(separator: "}")[0]))!
-                print(self.klassenID)
                 self.getSubjects()
             }
             else
             {
-                self.errorIn(.login, jsonAnswer: res)
+                self.errorIn(.login, httpAnswer: res)
             }
         }.resume()
     }
@@ -226,7 +224,7 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
+            let jsonData = self.getResultOfhttpAnswer(data: data)
 
             do
             {
@@ -235,7 +233,7 @@ class WebUntisAPI: ObservableObject
             }
             catch
             {
-                self.errorIn(.subjects, jsonAnswer: jsonData)
+                self.errorIn(.subjects, httpAnswer: jsonData)
             }
         }.resume()
     }
@@ -257,8 +255,7 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
-
+            let jsonData = self.getResultOfhttpAnswer(data: data)
             do
             {
                 self.klassen = try JSONDecoder().decode([Klasse].self, from: Data(jsonData.utf8)).filter({ $0.teacher1 != 0 })
@@ -266,11 +263,11 @@ class WebUntisAPI: ObservableObject
             }
             catch
             {
-                self.errorIn(.klassen, jsonAnswer: jsonData)
+                self.errorIn(.klassen, httpAnswer: jsonData)
             }
         }.resume()
     }
-    
+
     func getRooms()
     {
         let body = """
@@ -288,7 +285,7 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
+            let jsonData = self.getResultOfhttpAnswer(data: data)
             do
             {
                 self.rooms = try JSONDecoder().decode([Room].self, from: Data(jsonData.utf8))
@@ -296,10 +293,11 @@ class WebUntisAPI: ObservableObject
             }
             catch
             {
-                self.errorIn(.rooms,jsonAnswer: jsonData)
+                self.errorIn(.rooms, httpAnswer: jsonData)
             }
         }.resume()
     }
+
     func getDepartments()
     {
         let body = """
@@ -317,7 +315,7 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
+            let jsonData = self.getResultOfhttpAnswer(data: data)
             do
             {
                 self.departments = try JSONDecoder().decode([Department].self, from: Data(jsonData.utf8))
@@ -325,10 +323,11 @@ class WebUntisAPI: ObservableObject
             }
             catch
             {
-                self.errorIn(.departments,jsonAnswer: jsonData)
+                self.errorIn(.departments, httpAnswer: jsonData)
             }
         }.resume()
     }
+
     func getHolidays()
     {
         let body = """
@@ -346,7 +345,7 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
+            let jsonData = self.getResultOfhttpAnswer(data: data)
             do
             {
                 self.holidays = try JSONDecoder().decode([Holiday].self, from: Data(jsonData.utf8))
@@ -354,10 +353,11 @@ class WebUntisAPI: ObservableObject
             }
             catch
             {
-                self.errorIn(.holidays,jsonAnswer: jsonData)
+                self.errorIn(.holidays, httpAnswer: jsonData)
             }
         }.resume()
     }
+
     func getTimegridUnits()
     {
         let body = """
@@ -375,20 +375,21 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
+            let jsonData = self.getResultOfhttpAnswer(data: data)
             do
             {
-                var tg: TimeGrid = try JSONDecoder().decode([TimeGrid].self, from: Data(jsonData.utf8))[0]
+                var tg = try JSONDecoder().decode([TimeGrid].self, from: Data(jsonData.utf8))[0]
                 tg.timeUnits = tg.timeUnits.filter({ $0.startTime >= 800 })
                 self.timeGrid = tg
                 self.getCurrentSchoolyear()
             }
             catch
             {
-                self.errorIn(.timegridUnits,jsonAnswer: jsonData)
+                self.errorIn(.timegridUnits, httpAnswer: jsonData)
             }
         }.resume()
     }
+
     func getCurrentSchoolyear()
     {
         let body = """
@@ -406,7 +407,7 @@ class WebUntisAPI: ObservableObject
         request.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            let jsonData = self.getResultOfJSONAnswer(data: data)
+            let jsonData = self.getResultOfhttpAnswer(data: data)
             do
             {
                 self.schoolYear = try JSONDecoder().decode(SchoolYear.self, from: Data(jsonData.utf8))
@@ -414,58 +415,81 @@ class WebUntisAPI: ObservableObject
             }
             catch
             {
-                self.errorIn(.currentSchoolyear,jsonAnswer: jsonData)
+                self.errorIn(.currentSchoolyear, httpAnswer: jsonData)
             }
         }.resume()
     }
 
     func getTimetable()
     {
+        let oneWeekInSeconds: Int = 604800
         if self.isLoading
         {
             return
         }
-        DispatchQueue.main.async {
-            self.isLoading = true
-        }
 
-        let body = """
+        for i in 0..<3
         {
-            "id":"ID",
-            "method":"getTimetable",
-            "params":
+            let monday = self.mondayOfWeek.addingTimeInterval(Double(-oneWeekInSeconds + i * oneWeekInSeconds))
+            var inCache = false
+            self.weekSchedule.forEach()
+            {
+                week in
+                if self.dateFormatter.string(from: week.mondayOfWeek) == self.dateFormatter.string(from: monday)
                 {
-                    "id":"\(self.klassenID)",
-                    "type":"1",
-                    "startDate":\(self.dateFormatter.string(from: self.mondayOfWeek)),
-                    "endDate":\(self.dateFormatter.string(from: self.mondayOfWeek.addingTimeInterval(TimeInterval(exactly: 432000)!)))
-                },
-            "jsonrpc":"2.0"
-        }
-        """
-
-        var request = URLRequest(url: URL(string: baseURLStr + "&JSESSIONID=" + self.sessionID)!)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpMethod = "POST"
-        request.httpBody = body.data(using: .utf8)
-
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            DispatchQueue.main.async {
-                let jsonData = self.getResultOfJSONAnswer(data: data)
-                do
-                {
-                    let lesson = try Lesson.convertTable(webuntisAPI: self, jsonData: jsonData)
-                    self.weekSchedule = Weekplan(webuntis: self, lessons: lesson)
-                    self.beginFetchAt = nil
+                    inCache = true
+                    return
                 }
-                catch
-                {
-                    self.errorIn(.timetable,jsonAnswer: jsonData)
-                }
-                self.isLoading = false
             }
-        }
-            .resume()
+            if inCache
+            {
+                continue
+            }
+            DispatchQueue.main.async {
+                self.isLoading = true
+            }
+            
+            let body = """
+            {
+                "id":"ID",
+                "method":"getTimetable",
+                "params":
+                    {
+                        "id":"\(self.klassenID)",
+                        "type":"1",
+                        "startDate":\(self.dateFormatter.string(from: monday)),
+                        "endDate":\(self.dateFormatter.string(from: monday.addingTimeInterval(Double(432000))))
+                    },
+                "jsonrpc":"2.0"
+            }
+            """
 
+            var request = URLRequest(url: URL(string: baseURLStr + "&JSESSIONID=" + self.sessionID)!)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpMethod = "POST"
+            request.httpBody = body.data(using: .utf8)
+
+            URLSession.shared.dataTask(with: request) { data, _, _ in
+                DispatchQueue.main.async {
+                    let jsonData = self.getResultOfhttpAnswer(data: data)
+                    do
+                    {
+                        let lesson: [Lesson] = try Lesson.convertTable(webuntisAPI: self, jsonData: jsonData)
+                        if self.weekSchedule.count >= 10
+                        {
+                            self.weekSchedule.remove(at: 0)
+                        }
+                        self.weekSchedule.append(Weekplan(webuntis: self, lessons: lesson, mondayOfWeek: self.mondayOfWeek.addingTimeInterval(Double(-oneWeekInSeconds + i * oneWeekInSeconds))))
+                        self.beginFetchAt = nil
+                    }
+                    catch
+                    {
+                        self.errorIn(.timetable, httpAnswer: jsonData)
+                    }
+                    self.isLoading = false
+                }
+            }
+                .resume()
+        }
     }
 }
